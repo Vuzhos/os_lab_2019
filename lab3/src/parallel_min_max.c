@@ -42,16 +42,31 @@ int main(int argc, char **argv) {
             seed = atoi(optarg);
             // your code here
             // error handling
+            if (seed < 0)
+            {
+              printf("Error! Seed must be greater than 0!\n");
+              return 1;
+            }
             break;
           case 1:
             array_size = atoi(optarg);
             // your code here
             // error handling
+            if (array_size < 0) 
+            {
+              printf("Error! Size must be greater than 0!\n");
+              return 1;
+            }
             break;
           case 2:
             pnum = atoi(optarg);
             // your code here
             // error handling
+            if (pnum < 0) 
+            {
+              printf("Error! Number of processes must be greater than 0!\n");
+              return 1;
+            }
             break;
           case 3:
             with_files = true;
@@ -88,6 +103,18 @@ int main(int argc, char **argv) {
   GenerateArray(array, array_size, seed);
   int active_child_processes = 0;
 
+  int fd[2];
+  if (!with_files)
+  {
+    if (pipe(fd) == -1)
+    {
+      printf("An error ocurred with opening the pipe!\n");
+      return 1;
+    }
+  }
+  int part = array_size/pnum;
+  struct MinMax local_min_max;
+
   struct timeval start_time;
   gettimeofday(&start_time, NULL);
 
@@ -98,13 +125,21 @@ int main(int argc, char **argv) {
       active_child_processes += 1;
       if (child_pid == 0) {
         // child process
-
         // parallel somehow
-
+        local_min_max = GetMinMax(array, i*part, (i == pnum - 1) ? array_size : (i + 1) * part);
+        
         if (with_files) {
           // use files here
+          FILE* not_pipe_file = fopen("tmp.txt","a");
+	        fwrite(&local_min_max, sizeof(struct MinMax), 1, not_pipe_file);
+	        fclose(not_pipe_file);
         } else {
           // use pipe here
+          if (write(fd[1], &local_min_max, sizeof(struct MinMax)) == -1)
+          {
+            printf("An error ocurred with writing to the pipe!\n");
+            return 1;
+          }
         }
         return 0;
       }
@@ -117,7 +152,7 @@ int main(int argc, char **argv) {
 
   while (active_child_processes > 0) {
     // your code here
-
+    wait(NULL);
     active_child_processes -= 1;
   }
 
@@ -131,14 +166,31 @@ int main(int argc, char **argv) {
 
     if (with_files) {
       // read from files
+      FILE* not_pipe_file = fopen("tmp.txt", "rb");
+      fseek(not_pipe_file, i*sizeof(struct MinMax), SEEK_SET);
+      fread(&local_min_max, sizeof(struct MinMax), 1, not_pipe_file);
+      printf("Process: %i\tMin: %i\tMax: %i\n", i, local_min_max.min, local_min_max.max);
+      fclose(not_pipe_file);
     } else {
       // read from pipes
+      read(fd[0], &local_min_max, sizeof(struct MinMax));
+      printf("Process: %i\tMin: %i\tMax: %i\n", i, local_min_max.min, local_min_max.max);
     }
 
-    if (min < min_max.min) min_max.min = min;
-    if (max > min_max.max) min_max.max = max;
+    if (local_min_max.min < min_max.min) min_max.min = local_min_max.min;
+    if (local_min_max.max > min_max.max) min_max.max = local_min_max.max;
   }
 
+  if (with_files)
+  {
+    remove("tmp.txt");
+  }
+  else
+  {
+    close(fd[0]);
+    close(fd[1]);
+  }
+  
   struct timeval finish_time;
   gettimeofday(&finish_time, NULL);
 
@@ -147,6 +199,7 @@ int main(int argc, char **argv) {
 
   free(array);
 
+  printf("\n");
   printf("Min: %d\n", min_max.min);
   printf("Max: %d\n", min_max.max);
   printf("Elapsed time: %fms\n", elapsed_time);
