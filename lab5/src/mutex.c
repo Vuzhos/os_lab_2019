@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 void do_one_thing(int *);
 void do_another_thing(int *);
@@ -22,9 +23,13 @@ int common = 0; /* A shared variable for two threads */
 int r1 = 0, r2 = 0, r3 = 0;
 pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 
-int main() {
-  pthread_t thread1, thread2;
 
+bool with_mutex = 0;
+
+int main(int argc, char **argv) {
+  pthread_t thread1, thread2;
+  with_mutex = argc - 1;
+  // pthread_mutex_init(&mut, NULL);
   if (pthread_create(&thread1, NULL, (void *)do_one_thing,
 			  (void *)&common) != 0) {
     perror("pthread_create");
@@ -49,6 +54,8 @@ int main() {
 
   do_wrap_up(common);
 
+  // pthread_mutex_destroy(&mut);
+
   return 0;
 }
 
@@ -57,7 +64,8 @@ void do_one_thing(int *pnum_times) {
   unsigned long k;
   int work;
   for (i = 0; i < 50; i++) {
-    // pthread_mutex_lock(&mut);
+    if(with_mutex) pthread_mutex_lock(&mut);
+
     printf("doing one thing\n");
     work = *pnum_times;
     printf("counter = %d\n", work);
@@ -65,7 +73,8 @@ void do_one_thing(int *pnum_times) {
     for (k = 0; k < 500000; k++)
       ;                 /* long cycle */
     *pnum_times = work; /* write back */
-	// pthread_mutex_unlock(&mut);
+
+	  if(with_mutex) pthread_mutex_unlock(&mut);
   }
 }
 
@@ -74,7 +83,8 @@ void do_another_thing(int *pnum_times) {
   unsigned long k;
   int work;
   for (i = 0; i < 50; i++) {
-    // pthread_mutex_lock(&mut);
+    if(with_mutex) pthread_mutex_lock(&mut);
+
     printf("doing another thing\n");
     work = *pnum_times;
     printf("counter = %d\n", work);
@@ -82,7 +92,8 @@ void do_another_thing(int *pnum_times) {
     for (k = 0; k < 500000; k++)
       ;                 /* long cycle */
     *pnum_times = work; /* write back */
-    // pthread_mutex_unlock(&mut);
+
+    if(with_mutex) pthread_mutex_unlock(&mut);
   }
 }
 
